@@ -5,15 +5,18 @@ CCRadar: Cascade Chip Radar Sensor
 """
 from typing import Optional
 import os
+
+from matplotlib.widgets import Slider
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
 
 from core.calibration import Calibration, SCRadarCalibration
 from core.utils.common import error, info
 from core.utils import radardsp as rdsp
 from .lidar import Lidar
 
-from core.config import NUMBER_RANGE_BINS_MIN
+from core.config import EL_CFAR_SKIP_BIN, NUMBER_RANGE_BINS_MIN
 from core.config import NUMBER_DOPPLER_BINS_MIN
 from core.config import NUMBER_AZIMUTH_BINS_MIN
 from core.config import NUMBER_ELEVATION_BINS_MIN
@@ -29,6 +32,29 @@ from core.config import AZ_OS_CFAR_WS
 from core.config import AZ_OS_CFAR_GS
 from core.config import AZ_OS_CFAR_TOS
 
+# capon parameters
+# from core.config import CAPON_METHOD
+from core.config import AZ_BINS, EL_BINS, ANGLE_RES_EL, ANGLE_RES_AZ, AZ_RANGE, EL_RANGE,AZ_MESH, EL_MESH
+
+from core.config import RA_OS_CFAR_WS
+from core.config import RA_OS_CFAR_GS
+from core.config import RA_OS_CFAR_K
+from core.config import RA_OS_CFAR_TOS
+
+from core.config import EL_OS_CFAR_WS
+from core.config import EL_OS_CFAR_GS
+from core.config import EL_OS_CFAR_TOS
+
+# CFAR skip bin
+from core.config import CFAR_SKIP_RANGE_BIN_NEAR, CFAR_SKIP_RANGE_BIN_FAR, CFAR_SKIP_AZIMUTH_BIN
+
+
+import core.dsp as dsp
+
+import matplotlib
+
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 class SCRadar(Lidar):
     """Radar.
@@ -255,11 +281,26 @@ class SCRadar(Lidar):
         Example:
             self._to_cartesian(hmap)
         """
+        # Ensure 'hmap' is at least 2D
+        hmap = np.atleast_2d(hmap)
+
+        if hmap.size == 0 or hmap.shape[1] < 4:
+            print("Empty or invalid 'hmap' array. No operations performed.")
+            return hmap
+
+        # Initialize 'pcld' based on the shape of 'hmap'
+        # pcld = np.zeros((hmap.shape[0], max(4, hmap.shape[1])))  # Ensure pcld has at least 4 columns
+
         pcld = np.zeros(hmap.shape)
         pcld[:, 0] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.sin(hmap[:, 0])
         pcld[:, 1] = hmap[:, 1] * np.cos(hmap[:, 2]) * np.cos(hmap[:, 0])
         pcld[:, 2] = hmap[:, 1] * np.sin(hmap[:, 2])
         pcld[:, 3:] = hmap[:, 3:]
+
+        ## swap the xy coordinates
+        pcld[:, 0], pcld[:, 1] = pcld[:, 1], pcld[:, 0].copy()
+        pcld[:, 1] = -pcld[:, 1]
+
         return pcld
 
     def _heatmap_to_pointcloud(self, threshold: float = 0.15,
@@ -431,7 +472,11 @@ class SCRadar(Lidar):
         adc_samples = self.raw
 
         # Remove DC bias
-        adc_samples -= np.mean(adc_samples)
+        # adc_samples -= np.mean(adc_samples)
+
+        adc_samples_sc = self.raw
+        dc3_sc = np.mean(adc_samples_sc, axis=3)
+        adc_samples = adc_samples_sc - dc3_sc[:,:,:,np.newaxis]
 
         if self.sensor != "scradar":
             adc_samples *= self.calibration.get_frequency_calibration()
@@ -543,7 +588,7 @@ class SCRadar(Lidar):
             )
         return rbins, vbins, abins, ebins
 
-    def _pre_process(self, adc_samples: np.array) -> tuple[np.array, np.array]:
+    def _pre_process(self, adc_samples: np.array, apply_padding: bool = True) -> tuple[np.array, np.array]:
         """Pre processing of ADC samples.
 
         The pre-processing step helps in reshaping the data so to match
@@ -578,15 +623,16 @@ class SCRadar(Lidar):
         va_nel, va_naz, va_nc, va_ns = virtual_array.shape
 
         Ne, Na, Nc, Ns = self._get_fft_size(*virtual_array.shape)
-        virtual_array = np.pad(
-            virtual_array,
-            (
-                (0, Ne - va_nel), (0, Na - va_naz),
-                (0, Nc - va_nc), (0, Ns - va_ns)
-            ),
-            "constant",
-            constant_values=((0, 0), (0, 0), (0, 0), (0, 0))
-        )
+        if apply_padding:
+            virtual_array = np.pad(
+                virtual_array,
+                (
+                    (0, Ne - va_nel), (0, Na - va_naz),
+                    (0, Nc - va_nc), (0, Ns - va_ns)
+                ),
+                "constant",
+                constant_values=((0, 0), (0, 0), (0, 0), (0, 0))
+            )
         return virtual_array
 
     def _fesprit(self):
@@ -726,8 +772,76 @@ class SCRadar(Lidar):
         efft = np.fft.fft(afft, Ne, 0)
         efft = np.fft.fftshift(efft, 0)
 
+        if 0:
+            from matplotlib.ticker import MaxNLocator, FuncFormatter
+            def format_func(value, tick_number):
+                return f'{value:.1f}'
+            mimo_dfft_log = 20 * np.log10(np.abs(afft))
+            RAmap_log_plot = mimo_dfft_log - mimo_dfft_log.max()
+            fig = plt.figure(figsize=(9, 10))
+            ax = fig.add_subplot(111)
+            im = ax.imshow(RAmap_log_plot.T, cmap='viridis', aspect='auto')
+            ax.tick_params(axis='both', which='both', 
+               bottom=False, top=False, left=False, right=False,
+               labelbottom=False, labeltop=False, labelleft=False, labelright=False)
+
+            plt.tight_layout()
+            plt.show()
+
+
         # Return the signal power
         return np.abs(efft) ** 2
+
+    def _generate_range_azimuth_heatmap(self) -> np.array:
+        """Generate heatmap."""
+        # info("Generating heatmap using Beamforming")
+        # Calibrated raw data
+        adc_samples = self._calibrate()
+
+        ntx, nrx, nc, ns = adc_samples.shape
+        """ 
+        No windowing function applied to the raw data 
+        May adjust in the future
+        Need to know exactly the impact of the windowing function
+        especially on the phase model        
+        """
+        # ntx: Number of TX antenna
+        # nrx: Number of RX antenna
+        # nc: Number of chirp per antenna in the virtual array
+        # ns: Number of samples per chirp
+        ntx, nrx, nc, ns = adc_samples.shape
+        _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
+
+        # Range-FFT
+        rfft = np.fft.fft(adc_samples, Ns, -1)
+        rfft -= self.calibration.get_coupling_calibration()
+
+        '''NO clutter removal applied, since static objects are also considered'''
+
+        # Adjust original signal to the virtual array
+        _rfft = self._pre_process(rfft,False) # No padding applied, which affects the covariance matrix
+
+        # extract raw azimuth signal matrix in first dimension
+        # checked!
+        _rfft = _rfft[0, :, :, :]
+
+        # swith first and second dimension into (num_chirps_per_frame, num_rx_antennas, num_range_bins)
+        _rfft = np.swapaxes(_rfft, 0, 1)
+
+        BINS_PROCESSED = _rfft.shape[2]
+        # Generate a steering vector for AOA estimation given the theta range
+        # using OpenRadar DSP library
+        num_vec, steering_vec = dsp.gen_steering_vec(AZ_RANGE, ANGLE_RES_AZ, 8)
+        range_azimuth = np.zeros((AZ_BINS, BINS_PROCESSED))
+        method = 'Capon'
+        for i in range(BINS_PROCESSED):
+            if method == 'Capon':
+                range_azimuth[:,i], _ = dsp.aoa_capon(_rfft[:, :, i].T, steering_vec, magnitude=True)
+            elif method == 'Bartlett':
+                range_azimuth_multi = dsp.aoa_bartlett(steering_vec, _rfft[:, :, i], axis =1)
+                range_azimuth[:,i] = np.abs(range_azimuth_multi.sum(0)).squeeze()
+
+        return range_azimuth
 
     def _generate_radar_pcl(self) -> np.array:
         """Generate point cloud."""
@@ -760,6 +874,23 @@ class SCRadar(Lidar):
 
         mimo_dfft = dfft.reshape(ntx * nrx, Nc, Ns)
         mimo_dfft = np.sum(np.abs(mimo_dfft) ** 2, 0)
+        
+        if 1:
+            from matplotlib.ticker import MaxNLocator, FuncFormatter
+            def format_func(value, tick_number):
+                return f'{value:.1f}'
+            mimo_dfft_log = 10 * np.log10(mimo_dfft)
+            RAmap_log_plot = mimo_dfft_log - mimo_dfft_log.max()
+            fig = plt.figure(figsize=(9, 10))
+            ax = fig.add_subplot(111)
+            im = ax.imshow(RAmap_log_plot.T, cmap='viridis', aspect='auto')
+            ax.tick_params(axis='both', which='both', 
+               bottom=False, top=False, left=False, right=False,  
+               labelbottom=False, labeltop=False, labelleft=False, labelright=False)  
+
+            plt.tight_layout()
+            plt.show()
+
 
         # OS-CFAR for object detection
         _, detections = rdsp.nq_cfar_2d(
@@ -852,7 +983,8 @@ class SCRadar(Lidar):
                 for _t in _az:
                     efft = np.fft.fft(afft[:, _t], Ne, 0)
                     efft = np.fft.fftshift(efft, 0)
-                    _el = np.argmax(efft)
+                    _el = np.argmax(efft) 
+                    # seems to be wrong? in given range of given velocity, maybe two peaks?
                     obj.az = abins[_t]
                     obj.el = ebins[_el]
 
@@ -895,7 +1027,7 @@ class SCRadar(Lidar):
         # Exclude all points detected in the last range bins because
         # those detections are not reliable
         pcl = pcl[pcl[:, 1] < (0.95 * rmax)]
-        pcl = pcl[pcl[:, 4] > np.max(pcl[:, 4]) * 0.4]
+        # pcl = pcl[pcl[:, 4] > np.max(pcl[:, 4]) * 0.4]
         if not polar:
             pcl = self._to_cartesian(pcl)
         return pcl
@@ -1115,8 +1247,8 @@ class SCRadar(Lidar):
         rbins, _, abins, _ = self._get_bins(Nr, None, Na, None)
 
         dpcl = np.sum(signal_power, (0, 2))
-        noise = np.quantile(dpcl, 0.30, (0, 1))
-        dpcl /= noise
+        # noise = np.quantile(dpcl, 0.30, (0, 1))
+        # dpcl /= noise
         dpcl = 10 * np.log10(dpcl + 1)
 
         # Number of close range bins to skip
@@ -1150,17 +1282,321 @@ class SCRadar(Lidar):
             ax.set_xlabel("Azimuth (m)")
             ax.set(facecolor="black")
         else:
-            dpcl = np.transpose(dpcl, (1, 0))
-            az, rg = np.meshgrid(abins, rbins)
+            # fig = plt.figure(figsize=(9, 10))
+            # ax = fig.add_subplot(111)
+
+            # ax = plt.axes()
             _, ax = plt.subplots()
-            color = ax.pcolormesh(az, rg, dpcl, cmap="viridis")
             ax.set_xlabel("Azimuth (rad)")
 
+            im = ax.imshow(dpcl.T, cmap='viridis', aspect='auto', origin='lower')
+            ax.tick_params(axis='both', which='both', 
+               bottom=False, top=False, left=False, right=False,  
+               labelbottom=False, labeltop=False, labelleft=False, labelright=False) 
+            
+
         ax.set_ylabel("Range (m)")
-        ax.set_title(f"Frame {self.index:04}")
+        # ax.set_title(f"Frame {self.index:04}")    
+
+        plt.tight_layout()
         if show:
             plt.show()
+        
+        # test = 1
 
+    def showPointcloudFromRawBF(self, polar: bool = False, novisible: bool = False, **kwargs):
+        """Render the pointcloud of detected object using beamforming.
+
+        Argument:
+            polar: Flag to indicate that the pointcloud should be rendered
+                   directly in the polar coordinate. When false, the
+                   heatmap is converted into the cartesian coordinate
+        """
+        if self.raw is None:
+            info("No raw ADC samples available!")
+            return None
+        
+
+        method = 'Capon' # 'Bartlett' or 'Capon'
+
+        '''Coloradar OS-CFAR Flag'''
+        EN_coloradar_CFAR = False
+
+        '''START Range Azimuth'''
+        adc_samples = self._calibrate()
+
+        # ntx: Number of TX antenna
+        # nrx: Number of RX antenna
+        # nc: Number of chirp per antenna in the virtual array
+        # ns: Number of samples per chirp
+        ntx, nrx, nc, ns = adc_samples.shape
+        _, _, Nc, Ns = self._get_fft_size(None, None, nc, ns)
+
+        # Range-FFT
+        rfft = np.fft.fft(adc_samples * np.blackman(ns).reshape(1, 1, 1, -1), Ns, -1)
+
+        '''NO clutter removal applied, since static objects are also considered'''
+
+        # Adjust original signal to the virtual array [EL, AZ, CHIRP, SAMPLES]
+        _rfft_full = self._pre_process(rfft,False) # No padding applied, which affects the covariance matrix
+
+        _rfft = _rfft_full[0, :, :, :]
+
+        # swith first and second dimension into (num_chirps_per_frame, num_rx_antennas, num_range_bins)
+        _rfft = np.swapaxes(_rfft, 0, 1)
+
+        BINS_PROCESSED = _rfft.shape[2]
+
+        # using OpenRadar DSP library
+        num_vec, steering_vec = dsp.gen_steering_vec(AZ_RANGE, ANGLE_RES_AZ, 8,
+                                                    #  1)
+                                                     2 * self.calibration.d) # 8 antennas in azimuth
+        range_azimuth = np.zeros((AZ_BINS, BINS_PROCESSED))
+
+        range_azimuth_CBF = np.zeros((_rfft.shape[0], AZ_BINS, BINS_PROCESSED))# only used for visualization in chirp rate
+
+        for i in range(BINS_PROCESSED):
+            if method == 'Capon':
+                range_azimuth[:,i], _ = dsp.aoa_capon(_rfft[:, :, i].T, steering_vec, magnitude=True)
+            elif method == 'Bartlett':
+                range_azimuth_multi = dsp.aoa_bartlett(steering_vec, _rfft[:, :, i], axis =1)
+                range_azimuth_CBF[:,:,i] = range_azimuth_multi # only used for visualization in chirp rate
+                range_azimuth[:,i] = np.abs(range_azimuth_multi.sum(0)).squeeze()
+        ## in dB, TODO: check if this is correct in cascade radar
+
+        RAmap_log = 20*np.log10(np.abs(range_azimuth))
+        RAmap_sq = np.abs(range_azimuth)** 2 # [Azimuth, Range]
+
+       
+
+        # Coloradar OS-CFAR
+        if EN_coloradar_CFAR:
+            _, detections = rdsp.nq_cfar_2d(
+                RAmap_sq,
+                RA_OS_CFAR_WS,
+                RA_OS_CFAR_GS,
+                RA_OS_CFAR_K,
+                RA_OS_CFAR_TOS,
+            )
+
+        # openradar OS-CFAR
+        # --- cfar in azimuth direction
+        OpenRadarRAmap = RAmap_sq
+
+        first_pass, _ = np.apply_along_axis(
+            func1d=dsp.cago_,
+            axis=0,
+            arr=OpenRadarRAmap,
+            l_bound=0,
+            guard_len=-1,
+            noise_len=2,
+        )
+        # K < 2* noise_len
+        # --- cfar in range direction
+        second_pass, noise_floor = np.apply_along_axis(
+            func1d=dsp.cago_,
+            axis=0,
+            arr=OpenRadarRAmap.T,
+            l_bound=0,
+            guard_len=-1,
+            noise_len=2,
+        )
+        # --- classify peaks and caclulate snrs
+        noise_floor = noise_floor.T
+        first_pass = (OpenRadarRAmap > first_pass)
+        second_pass = (OpenRadarRAmap > second_pass.T)
+        peaks = (first_pass & second_pass)
+        peaks[:CFAR_SKIP_AZIMUTH_BIN, :] = 0
+        peaks[-CFAR_SKIP_AZIMUTH_BIN:, :] = 0
+        peaks[:, :CFAR_SKIP_RANGE_BIN_NEAR] = 0
+        peaks[:, -CFAR_SKIP_RANGE_BIN_FAR] = 0
+        pairs = np.argwhere(peaks)
+        azimuths, ranges = pairs.T
+        snrs = OpenRadarRAmap[pairs[:,0], pairs[:,1]] / noise_floor[pairs[:,0], pairs[:,1]]
+        ## all detections are in pairs
+
+        '''3D pcd'''
+        rbins, vbins, _, _ = self._get_bins(RAmap_log.shape[1], Nc, None, None)
+        pcl = []
+        from core.utils.radardsp import ObjectDetected
+        detections: list[ObjectDetected] = []
+        idx = 0
+        for xidx, yidx in pairs:
+            obj = ObjectDetected()
+            obj.vidx = xidx
+            obj.ridx = yidx
+            obj.snr = snrs[idx]
+            idx += 1
+            detections.append(obj)
+
+        for idx, obj in enumerate(detections):
+            obj.range = rbins[obj.ridx]
+            obj.az = AZ_MESH[obj.vidx]
+
+            # estimate elevation by beamforming
+            # Extract range data in the range bin [elevation, azimuth, velocity, range]
+            elevation_raw = _rfft_full[:, :, :, obj.ridx]
+
+            num_ant = 12
+            num_vec = EL_BINS
+            # num_vec = int(round(num_vec))
+            steering_vectors_az = np.zeros((num_vec, num_ant), dtype='complex128') 
+            for kk in range(num_vec):
+                ele_rad = EL_MESH[kk]
+                A_steering = rdsp.steering_matrix( # TODO: check the elevation!
+                self.calibration.antenna.txl,
+                self.calibration.antenna.rxl,
+                obj.az,
+                ele_rad,
+                2 * self.calibration.d
+                )
+                # append A_steering to the steering_vectors_az
+                steering_vectors_az[kk, :] = A_steering.T
+            
+            '''elevation'''
+            part1 = elevation_raw[0, 0:4, :]
+            part2 = elevation_raw[1, 2:6, :]
+            part3 = elevation_raw[0, 4:8, :]
+            final_matrix = np.concatenate([part1, part2, part3], axis=0)
+
+            ae_beamWeights   = np.zeros((num_ant, EL_BINS , 1), dtype=np.complex_)
+            azimuth_elevation = np.zeros((EL_BINS, 1))
+
+
+            '''Capon + QR'''
+            azimuth_elevation_qr, ae_beamWeights = dsp.aoa_capon(final_matrix, steering_vectors_az, magnitude=True, qr=True)
+
+            azimuth_elevation = azimuth_elevation_qr
+
+            det_matrix = np.abs(azimuth_elevation)
+
+            thresholdElevation, noiseFloorElevation = np.apply_along_axis(func1d=dsp.cago_,
+                                                        axis=0,
+                                                        arr=(det_matrix),
+                                                        l_bound=0,
+                                                        guard_len= -1,
+                                                        noise_len= 2)
+
+            det_ele_mask = (det_matrix > thresholdElevation)
+            _ele = np.argwhere(det_ele_mask == True)
+
+            noise_power = np.percentile(det_matrix, 20)
+
+            det_ele_mask[0:EL_CFAR_SKIP_BIN] = 0
+            det_ele_mask[-EL_CFAR_SKIP_BIN:] = 0
+
+            final_det_ele_mask = det_ele_mask & (det_matrix > noise_power * 1)
+            _ele_final = np.argwhere(final_det_ele_mask == True)
+            _ele_final = _ele_final.flatten() 
+
+            for idx in _ele_final:
+                
+                obj.el = EL_MESH[idx]
+
+                ''' skip the invalid elevation '''
+                if np.sin(obj.az)**2 + np.sin(obj.el)**2 > 0.99:
+                    continue
+                # Doppler estimation
+
+                ''' CBF beamforming '''
+                point_beamWeights = steering_vectors_az[idx, :].T.reshape(-1, 1)
+
+                dopplerFFTInput = np.dot(point_beamWeights.conj().T, final_matrix)
+                dopplerFFTInput = np.squeeze(dopplerFFTInput)
+                dopplerEst = np.fft.fft(dopplerFFTInput, Nc, axis=0)
+                dopplerEst = np.fft.fftshift(dopplerEst)
+                
+                vidx = np.argmax(np.abs(dopplerEst))
+
+                obj.velocity = vbins[vidx]
+
+                obj.el = -obj.el
+                obj.az = np.arcsin(np.sin(obj.az)/np.cos(obj.el))
+
+                pcl.append(np.array([
+                            obj.az,                     # Azimnuth
+                            obj.range,                  # Range
+                            obj.el,                     # Elevation
+                            obj.velocity,               # Velocity
+                            10 * np.log10(obj.snr)      # SNR
+                        ]))
+
+        pcl = np.array(pcl)
+
+        # Remove very close range
+        pcl = pcl[pcl[:, 1] >= 1.5]
+        # no polar
+        pcl = self._to_cartesian(pcl) 
+
+        '''Extra step to revise the azimuth and elevation'''
+        pcl[:,3] = -pcl[:,3]
+
+        return pcl
+
+    def show2DRangeAzimuthMap(
+        self, polar: bool = False, show: bool = True, method: str = "Capon"
+    ) -> None:
+        """
+        Process the raw ADC samples and render the 2D Range-Azimuth map.
+        following the pipeline:
+            1. Calibrate the raw ADC samples
+            2. Apply the Range FFT processing +  beamforming method
+            3. Render the 2D Range-Azimuth map
+
+        Arguments:
+            method: Beamforming method to use. Default is Capon
+        """
+        if self.raw is None:
+            info("No raw ADC samples available!")
+            return None
+
+        # info("Processing raw ADC samples...")
+        RAmap = self._generate_range_azimuth_heatmap()
+
+        RAmap = 20*np.log10(np.abs(RAmap))
+
+        Nr = RAmap.shape[1]
+
+        abins = np.linspace(-AZ_RANGE, AZ_RANGE, AZ_BINS)* (np.pi / 180)
+        rbins, _, _ , _ = self._get_bins(Nr, None, None, None)
+
+        RAmap = np.transpose(RAmap, (1, 0))
+        if not polar:
+            ''' Test for none polar plot'''
+            az, rg = np.meshgrid(abins, rbins)
+            _, ax = plt.subplots()
+            RAmap = np.fliplr(RAmap)
+            
+            color = ax.pcolormesh(az, rg, RAmap, cmap="viridis")
+
+            ax.set_xlabel("Azimuth (rad)")
+
+            # labels
+            ax.set_xlabel("Azimuth (rad)")
+        else:
+            ''' Test for polar plot '''
+            _r = np.kron(rbins, np.cos(abins))
+            _az = np.kron(rbins, np.sin(abins))
+            ax = plt.axes()
+
+            RAmap = np.fliplr(RAmap)
+            print("flip done")
+            ax.scatter(
+                _az,        # hmap[:, 0],
+                _r ,        # hmap[:, 1],
+                RAmap,       # hmap[:, 2],
+                c=RAmap,     # hmap[:, 2],
+            )
+
+            ax.set_xlabel("Azimuth (m)")
+            ax.set(facecolor="black")
+        ax.tick_params(axis='both', which='both', 
+            bottom=False, top=False, left=False, right=False, 
+            labelbottom=False, labeltop=False, labelleft=False, labelright=False)  
+
+        ax.set_ylabel("Range (m)")
+        if show:
+            plt.show()
 
 class CCRadar(SCRadar):
     """Cascade Chip Radar.

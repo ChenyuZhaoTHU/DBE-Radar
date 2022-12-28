@@ -15,7 +15,7 @@ C: float = 299792458.0
 
 
 def steering_matrix(txl: np.array, rxl: np.array,
-                            az: np.array, el: np.array,) -> np.array:
+                            az: np.array, el: np.array, distance: float = 1.,) -> np.array:
     """Build a steering matrix.
 
     Arguments:
@@ -23,6 +23,7 @@ def steering_matrix(txl: np.array, rxl: np.array,
         rxl: RX Antenna layout
         az: Azimuth angle
         el: Elevation angle
+        distance: Distance between the TX and RX antenna
     """
     taz = txl[:, 1]
     tel = txl[:, 2]
@@ -35,7 +36,13 @@ def steering_matrix(txl: np.array, rxl: np.array,
     lel = lel.reshape(-1, 1)
     # Virtual antenna array steering matrix
     smat = np.exp(
-        1j * np.pi * (laz * (np.cos(az) * np.sin(el)) + lel * np.cos(el))
+        # 1j * np.pi * distance * (laz * (np.cos(az) * np.sin(el)) + lel * np.cos(el))
+
+
+        -1j * np.pi * distance * (laz * np.sin(az) + lel * np.sin(el))
+        # -1j * np.pi * distance * (laz * np.sin(az) * np.sin(el) + lel * np.cos(el))
+        # 1j * np.pi * distance  * (laz * np.sin(az) + lel * np.sin(el))
+        # -1j*np.pi*distance*(laz*np.sin(az)*np.cos(el) + lel*np.sin(el))
     )
     return smat
 
@@ -162,6 +169,10 @@ def virtual_array(adc_samples: np.array,
             # When a given azimuth and elevation position is already
             # populated, the new value is added to the previous to have
             # a strong signal feedback
+            ### will average the signal instead of summing could be better? 
+            #  [TODO] note that the some antenna is repeated in the layout
+            #       so the signal will be added multiple times
+            #      but some matrix is zero (Due to TDM MIMO), no signal 
             va[tel+rel, taz+raz, :, :] += adc_samples[tidx, ridx, :, :]
     return va
 

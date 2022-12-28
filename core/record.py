@@ -18,6 +18,7 @@ from core.radar import SCRadar, CCRadar
 
 from .utils.common import error
 
+from tqdm import tqdm
 
 class Record:
     """Record.
@@ -99,7 +100,7 @@ class Record:
         output_dir = f"{output_dir}/{self.codename}/{sensor}"
         os.makedirs(output_dir, exist_ok=True)
         self._output_dir = output_dir
-        cpu_count: int = multiprocessing.cpu_count()
+        cpu_count: int = multiprocessing.cpu_count()-4
         print(f"Please wait! Processing on {cpu_count} CPU(s)")
 
         if sensor == "lidar":
@@ -119,12 +120,21 @@ class Record:
                 self.descriptor["paths"]["rootdir"],
                 self.descriptor["paths"][sensor]["raw"]["data"]
             )
-            nb_files: int = len(os.listdir(dataset_path)) - 1
+            nb_files: int = len(os.listdir(dataset_path)) - 1   
             with multiprocessing.Pool(cpu_count) as pool:
-                pool.map(
-                    self._process_radar,
-                    range(1, nb_files + 1),
-                    chunksize=10
+                # pool.map(
+                #     self._process_radar,
+                #     range(1, nb_files + 1),
+                #     chunksize=10
+                # )
+                r = list(
+                    tqdm(
+                        pool.imap_unordered(
+                            # self._process_radar, range(0, 1), chunksize=10
+                            self._process_radar, range(0, nb_files + 1), chunksize=10
+                        ),
+                        total=nb_files,
+                    )
                 )
 
     def _process_radar(self, idx: int) -> int:
@@ -144,8 +154,50 @@ class Record:
         self.load(self._sensor)
         SIZE: int = 20   # inch
         plt.figure(1, clear=True, dpi=self._dpi, figsize=(SIZE, SIZE))
-        if self._kwargs.get("heatmap_3d") == False:
-            self.ccradar.show2dHeatmap(False, False)
+        if self._kwargs.get("beamforming"):
+            if self._sensor == "scradar":
+                self.scradar.show2DRangeAzimuthMap(
+                    self._kwargs.get("polar"),
+                    show=False,
+                )
+            elif self._sensor == "ccradar":
+                self.ccradar.show2DRangeAzimuthMap(
+                    self._kwargs.get("polar"),
+                    show=False,
+                )
+        elif self._kwargs.get("beamformingPCL"):
+            if self._sensor == "scradar":
+                if self._kwargs.get("pointcloud"): ## save pointcloud
+                    pcl = self.scradar.showPointcloudFromRawBF(
+                        polar=self._kwargs.get("polar"),
+                         show=False,
+                         novisible=True
+                    )
+                    if pcl is None:
+                        print("No point cloud data returned")
+                        return None 
+                    pcl.astype(np.float32).tofile(
+                        f"{self._output_dir}/radar_pointcloud_{idx}.bin")
+                    return idx
+                else: # save picture
+                    self.scradar.showPointcloudFromRawBF(
+                            self._kwargs.get("polar"),
+                            show=False,
+                        )
+                    plt.savefig(f"{self._output_dir}/radar_{idx:04}.jpg", dpi=300)
+                    plt.close('all')
+                    return idx
+            elif self._sensor == "ccradar":
+                error("Beamforming Pointcloud is not supported for CCRadar")
+                plt.savefig(f"{self._output_dir}/radar_{idx:04}.jpg", dpi=300)
+                plt.close('all')
+                return idx
+
+        elif self._kwargs.get("heatmap_3d") == False:
+            if self._sensor == "scradar":
+                self.scradar.show2dHeatmap(True,False)
+            elif self._sensor == "ccradar":
+                self.ccradar.show2dHeatmap(True,False)
         elif self._kwargs.get("heatmap_3d"):
             self.ccradar.showHeatmapFromRaw(
                 self._kwargs.get("threshold"),
@@ -183,6 +235,7 @@ class Record:
                 show=False,
             )
         plt.savefig(f"{self._output_dir}/radar_{idx:04}.jpg", dpi=self._dpi)
+        plt.close('all')
         return idx
 
     def _process_lidar(self, idx: int) -> int:
@@ -200,11 +253,26 @@ class Record:
         """
         self.index = idx
         self.load(self._sensor)
-        bev = self.lidar.getBirdEyeView(
-            self._kwargs.get("resolution", 0.05),
-            self._kwargs.get("srange"),
-            self._kwargs.get("frange"),
-        )
+        if self._kwargs.get("polar"):
+            bev = self.lidar.getPolarBirdView(
+                self._kwargs.get("resolution", 0.1),
+                0.4,  # 0.5 degree angle resolution
+                (1.0, 13.5),
+                (-90, 90),
+                # (-args.width/2, args.width/2),
+                # (-args.height/2, args.height/2),
+            )
+            target_size = (2560, 1920)  
+            bev = cv.resize(bev, target_size, interpolation=cv.INTER_LINEAR) 
+            bev = cv.flip(bev, 0)  
+            bev = cv.flip(bev, 1)
+
+        else:
+            bev = self.lidar.getBirdEyeView(
+                self._kwargs.get("resolution", 0.1),
+                self._kwargs.get("srange"),
+                self._kwargs.get("frange"),
+            )
         plt.imsave(f"{self._output_dir}/lidar_bev_{idx:04}.jpg", bev)
 
     def make_video(self, inputdir: str, ext: str = "jpg") -> None:
@@ -213,7 +281,7 @@ class Record:
         files = sorted(files)
         height, width, _ = plt.imread(files[0]).shape
         fourcc = cv.VideoWriter_fourcc(*'MJPG')
-        video = cv.VideoWriter(inputdir + f"/{self.codename}.avi", fourcc, 5, (width, height))
+        video = cv.VideoWriter(inputdir + f"/{self.codename}.avi", fourcc, 10, (width, height))
         for idx, img in enumerate(files):
             print(
                 f"[ ========= {100 * idx/len(files): 2.2f}% ========= ]\r",

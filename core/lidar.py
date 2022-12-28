@@ -110,6 +110,8 @@ class Lidar(object):
             pointcloud = self.cld
         else:
             pointcloud = self.getPointCloud()
+        if x_filter is None and y_filter is None and z_filter is None:
+            return pointcloud
         filtering_mask = True
         if x_filter:
             x_min, x_max = x_filter
@@ -125,6 +127,82 @@ class Lidar(object):
             filtering_mask = filtering_mask &  (pointcloud[:, 2] <= z_max)
         return pointcloud[filtering_mask]
 
+    def getPolarBirdView(self, resolution: float,
+                         degree_resolution: float,
+                        rrange: tuple[float, float],  # range in meters
+                        azimuth_range: tuple[float, float],  # azimuth in radians
+                        ) -> None:
+        """Generate a polar bird eye view (range-azimuth) of the point cloud.
+        Arguments:
+            resolution: The pixel resolution of the image to generate (angular and range)
+            rrange: Range limits to consider (in meters).
+                Format: (rrange_min, rrange_max)
+            azimuth_range: Azimuth limits to consider (in radians).
+                Format: (azimuth_min, azimuth_max)
+        """
+        pointcloud = self.getPointCloudSample(x_filter=None, y_filter=None, z_filter=None, full=True)
+        x = pointcloud[:, 0]
+        y = pointcloud[:, 1]
+        z = pointcloud[:, 2]
+
+        # percen_80 = np.percentile(z, 80)
+
+        # Compute the range and azimuth for each point
+        ranges = np.sqrt(x**2 + y**2)
+        azimuths = np.arctan2(y, x) * 180 / np.pi
+
+        #  special FoR single chip radar
+        azimuths = azimuths + 180
+        azimuths[azimuths > 180] = azimuths[azimuths > 180] - 360
+
+
+        # Filter points by range and azimuth limits
+        valid_mask = (
+            (ranges >= rrange[0])
+            & (ranges <= rrange[1])
+            & (azimuths >= azimuth_range[0])
+            & (azimuths <= azimuth_range[1])
+            # & (z > percen_80)
+        )
+
+        # valid_mask = valid_mask & (azimuths < 90) & (azimuths > -90)
+
+        valid_ranges = ranges[valid_mask]
+        valid_azimuths = azimuths[valid_mask]
+        valid_z = z[valid_mask]
+        valid_intensities = pointcloud[valid_mask, 3]
+
+        # Convert range and azimuth to polar coordinates in pixel space
+        # range_pixels = ((valid_ranges - rrange[0]) / (rrange[1] - rrange[0]) * resolution).astype(np.int32)
+        # azimuth_pixels = ((valid_azimuths - azimuth_range[0]) / (azimuth_range[1] - azimuth_range[0]) * degree_resolution).astype(np.int32)
+        range_pixels = ((valid_ranges - rrange[0]) /  resolution).astype(np.int32)
+        azimuth_pixels = ((valid_azimuths - azimuth_range[0]) / degree_resolution).astype(np.int32)
+
+        # Prepare the three channels of the polar bird eye view image
+        pixels = np.zeros((len(valid_z), 3), dtype=np.uint8)
+
+        # Encode distance in red channel
+        # pixels[:, 0] = (255.0 / (1.0 + np.exp(-valid_ranges))).astype(np.uint8)
+
+        # Encode height in green channel
+        pixels[:, 1] = (255.0 / (1.0 + np.exp(-valid_z))).astype(np.uint8)
+
+        # Encode intensity in blue channel
+        # min_intensity = min(valid_intensities)
+        # max_intensity = max(valid_intensities)
+        # pixels[:, 2] = (
+        #     ((valid_intensities - min_intensity) / np.abs(max_intensity - min_intensity)) * 255
+        # ).astype(np.uint8)
+
+        # Create the image frame for the polar bird eye view
+        img_width: int = 1 + int((rrange[1] - rrange[0])/resolution)
+        img_height: int = 1 + int((azimuth_range[1] - azimuth_range[0])/degree_resolution)
+        polar_img = np.zeros([img_width, img_height, 3], dtype=np.uint8)
+
+        # Set the values in the image frame
+        polar_img[range_pixels, azimuth_pixels] = pixels
+
+        return polar_img
 
     def getBirdEyeView(self, resolution: float,
                        srange: tuple[float, float], # side range

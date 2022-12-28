@@ -3,11 +3,14 @@ import sys
 import argparse
 
 import matplotlib
-matplotlib.use("WebAgg")
+# matplotlib.use("WebAgg")
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
 from core.dataset import Coloradar
 from core.utils.common import info, success
+
+from core.utils.common import error, warning
 
 
 def main () -> None:
@@ -180,7 +183,7 @@ def main () -> None:
         "-s", "--save-as",
         help="Save post-processed ADC samples in files. Values: 'bin', 'csv'",
         type=str,
-        default="bin",
+        default="",
     )
     parser.add_argument(
         "--save-to",
@@ -193,6 +196,16 @@ def main () -> None:
         help="Folder to read input images from",
         type=str,
         default=None,
+    )
+    parser.add_argument(
+        "-bf", "--beamforming",
+        help="Perform beamforming on the radar data,(only supported Capon)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "-bfpcl", "--beamformingPCL",
+        help="Perform beamforming to generate pointcloud on the radar data",
+        action="store_true",
     )
 
     args = parser.parse_args()
@@ -260,23 +273,37 @@ def main () -> None:
                     sys.exit(0)
                 elif args.heatmap_2d:
                     info("Rendering 2D heatmap ...")
-                    record.scradar.show2dHeatmap()
+                    record.scradar.show2dHeatmap(polar=True)
                     sys.exit(0)
-                info("Rendering processed raw radar ADC samples ...")
-                record.scradar.showHeatmapFromRaw(
-                    args.threshold,
-                    args.no_sidelobe,
-                    args.velocity_view,
-                    args.polar,
-                    (args.min_range, args.max_range),
-                    (args.min_azimuth, args.max_azimuth),
-                )
-                success("Successfully closed!")
-                sys.exit(0)
-            info("Rendering single chip radar pointcloud ...")
-            record.scradar.show()
-            success("Successfully closed!")
-            sys.exit(0)
+                elif args.beamforming:
+                    info("Performing beamforming on the radar data ...")
+                    record.scradar.show2DRangeAzimuthMap()
+                    success("Successfully closed!")
+                    sys.exit(0)
+                elif args.beamformingPCL:
+                    info("Generate PCL by beamforming ...")
+                    record.scradar.showPointcloudFromRawBF()
+                    success("Successfully closed!")
+                    sys.exit(0)
+                elif args.heatmap:
+                    info("4D heatmap...")
+                    record.scradar.showHeatmapFromRaw(
+                        args.threshold,
+                        args.no_sidelobe,
+                        args.velocity_view,
+                        args.polar,
+                        (args.min_range, args.max_range),
+                        (args.min_azimuth, args.max_azimuth),
+                    )
+                    success("Successfully closed!")
+                    sys.exit(0)
+                else:
+                    error("Invalid command!")
+                    sys.exit(0)
+            # info("Rendering single chip radar pointcloud ...")
+            # record.scradar.show()
+            # success("Successfully closed!")
+            # sys.exit(0)
         elif args.ccradar:
             record.load("ccradar")
             if args.bird_eye_view and (not args.raw):
@@ -349,6 +376,14 @@ def main () -> None:
                 )
                 success("Radar 2D heatmap generated with success!")
                 sys.exit(0)
+            if args.beamforming:
+                # record.process_and_save(
+                #     "ccradar",
+                #     beamforming=True,
+                #     output=args.save_to,
+                # )
+                error("ccradar Not support Beamforming !")
+                sys.exit(0)
             if args.pointcloud:
                 record.process_and_save(
                     "ccradar",
@@ -370,6 +405,35 @@ def main () -> None:
                 heatmap_3d=True,
             )
             success("Radar 3D heatmap generated with success!")
+            sys.exit(0)
+        elif args.scradar and args.raw:
+            info(f"Generating batches of sradar heatmap from '{args.dataset}'")
+            if args.heatmap_2d:
+                record.process_and_save(
+                    "scradar",
+                    heatmap_3d=False,
+                    output=args.save_to,
+                )
+                success("Radar 2D heatmap generated with success!")
+                sys.exit(0)
+            if args.beamforming:
+                record.process_and_save(
+                    "scradar",
+                    beamforming=True,
+                    output=args.save_to,
+                )
+                success("Beamforming generated with success!")
+                sys.exit(0)
+            if args.beamformingPCL:
+                record.process_and_save(
+                    "scradar",
+                    beamformingPCL=True,
+                    pointcloud=args.pointcloud,
+                    output=args.save_to,
+                )
+                success("Beamforming PCL generated with success!")
+                sys.exit(0)
+            error("Not Arg !")
             sys.exit(0)
 
     elif args.dataset and args.animate:

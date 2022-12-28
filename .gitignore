@@ -10,3 +10,5 @@ dataset/*
 
 # Output folder for generated artifacts (images, etc.)
 output
+
+.vscode
