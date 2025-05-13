@@ -1,8 +1,8 @@
-# Digital Beamforming Enhanced Radar Odometry
+# Digital Beamforming Enhancement for Radar Odometry
 
-<img src="doc/ICRA25_2261_VI_i.gif" alt="Video Demo">
+<!-- <img src="doc/Title.gif" alt="Video Demo"> -->
 
-Digital Beamforming Enhanced Radar Odometry (**DBE-Radar-Odometry**) is an advanced radar signal processing pipeline that enhances radar-based odometry and SLAM systems by integrating spatial domain beamforming techniques. This project provides an alternative to traditional FFT-based radar processing, improving the precision of radar localization and mapping.
+Digital Beamforming Enhancement (**DBE**) for Radar Odometry is an advanced radar signal processing pipeline that enhances radar-based odometry and SLAM systems by integrating spatial domain beamforming techniques. This project provides an alternative to traditional FFT-based radar processing, improving the precision of radar localization and mapping.
 
 
 ## Features
@@ -25,7 +25,8 @@ cd DBE-Radar-Odometry
 ### Prerequisites
 
 - Python 3.8+
-- Dependencies:
+
+Install the virtual environment and dependencies using the following commands:
   ```bash
   python -m venv venv
   source ./venv/bin/activate
@@ -60,24 +61,28 @@ Adjust the parameters as needed for your specific dataset and requirements.**
 
 1. **Draw range-azimuth map**
    
+   If you want to generate the range-azimuth map like the one shown in the demo video, you can use the following command.
+
+   <img src="doc/ICRA2025-section1.gif" alt="Radar Map" />
+
    single frame processing
    ```bash
-    python3 coloradar.py --dataset <datasetname> -i <index> --scradar --raw -bf --save-to ./dataset/bfpcltest/
+    python3 coloradar.py --dataset <datasetname> -i <index> --scradar --raw -bf --save-to <path_to_save>
     ```
     batch processing of radar data
    ```bash
-   python3 coloradar.py --dataset <datasetname> --scradar --raw -bf --save-to ./dataset/bfpcltest/
+   python3 coloradar.py --dataset <datasetname> --scradar --raw -bf --save-to <path_to_save>
    ```
 
 2. **Run DBE-Based Processing for Radar Point Cloud**
    
    single frame processing
    ```bash
-   python3 coloradar.py --dataset <datasetname> -i <index> --scradar --raw -bfpcl --save-to ./dataset/bfpcltest/
+   python3 coloradar.py --dataset <datasetname> -i <index> --scradar --raw -bfpcl --save-to <path_to_save>
    ```
    batch processing of radar data
    ```bash
-   python3 coloradar.py --dataset <datasetname> --scradar --raw -bfpcl --save-to ./dataset/bfpcltest/
+   python3 coloradar.py --dataset <datasetname> --scradar --raw -bfpcl --save-to <path_to_save>
    ```
 
 <!-- 3. **Evaluate Odometry Results**
@@ -98,15 +103,33 @@ section in the Cloud_Map_Evaluation project to run the evaluation.
 <!-- An extra step is required to generate the ground truth point cloud for evaluation. The ground truth point cloud can be generated using the `generate_gt.py` script provided in the `eval` directory. This script takes the lidar point cloud and the corresponding ground truth trajectory as input and generates a ground truth point cloud for evaluation. -->
 
 ## Odometry Evaluation
+
+<img src="doc/ICRA2025-Exp1.gif" alt="Odometry Evaluation" />
+
 In this project, we use two different radar-inertial odometry algorithms to evaluate the performance of the DBE-Radar-Odometry pipeline.
 
 1. **[Filter-based Odometry](https://github.com/christopherdoer/rio)**: This is an RIO toolbox for EKF-based Radar Inertial Odometry.
 2. **[Graph-based Odometry](https://github.com/ethz-asl/rio)**: Graph-based, sparse radar-inertial odometry m-estimation with barometer support and zero-velocity tracking.
 
 Note that in this project, we only keep the doppler update and IMU in both algorithms, which means that the functions like barometer update, zero-velocity tracking, and loop closure are not included in the evaluation. To run the odometry evaluation, follow these steps:
+1. **Generate ROS bag file**: Generate a ROS bag file containing radar point cloud and IMU data. Note that the two odometry algorithms require different bag formats with specific topic names and data structures, so you'll need to create separate bag files for each algorithm.
+We provide a script to generate the ROS bag file.
 
-1. **Generate ROS bag file**: Generate a ROS bag file from the radar point cloud and the IMU data. The generated ROS bag file will be used as input for the odometry algorithms. Note that these two algorithms are not compatible with each other, so you need to generate two different ROS bag files for the two algorithms, especially for the topic names and the data format. 
-2. **Run the Odometry Algorithms**: Use the generated ROS bag file as input for the odometry algorithms. The output will be the estimated trajectory and the corresponding point cloud.
+   ```bash
+   # Generate ROS bag file
+   python eval/generate_bag.py -d dataset_name
+   # Or with custom paths
+   python eval/generate_bag.py -d dataset_name --base-dir /path/to/data --output-dir /path/to/output
+   # More options
+   python eval/generate_bag.py -h
+   ```
+
+   In addition, we also provide some sample ROS bag files for the ColoRadar dataset. You can find them in the `bags` folder.
+
+2. **Run the Odometry Algorithms**: Use the generated ROS bag file as input to run the odometry algorithms. This will produce the estimated trajectory and corresponding point cloud.
+The necessary configuration files are located in the `config` folder.
+Modify the launch files to use the appropriate config file for each odometry algorithm.
+
 3. **Evaluate the Odometry Results**: Use the [rpg_trajectory_evaluation](https://github.com/uzh-rpg/rpg_trajectory_evaluation) package to evaluate the odometry results.
 
 
