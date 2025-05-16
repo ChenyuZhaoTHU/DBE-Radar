@@ -155,11 +155,3 @@ noise_psd_w_deg: 0.001
 noise_psd_b_a: 0.001
 noise_psd_b_w_deg: 0.001
 noise_psd_b_alt: 0.000001
-
-
-# outdoor_run0  +aspen_run11
-# noise_psd_a: 0.001
-# noise_psd_w_deg: 0.0001
-# sigma_offset_radar_x: 0.   # offset added to estimated sigmas
-# sigma_offset_radar_y: 0.
-# sigma_offset_radar_z: 0.

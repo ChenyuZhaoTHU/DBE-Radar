@@ -105,11 +105,11 @@ We provide a script to generate the ROS bag file.
 
    ```bash
    # Generate ROS bag file
-   python eval/generate_bag.py -d dataset_name
+   python tools/generate_bag.py -d dataset_name
    # Or with custom paths
-   python eval/generate_bag.py -d dataset_name --base-dir /path/to/data --output-dir /path/to/output
+   python tools/generate_bag.py -d dataset_name --base-dir /path/to/data --output-dir /path/to/output
    # More options
-   python eval/generate_bag.py -h
+   python tools/generate_bag.py -h
    ```
 
    In addition, we also provide some sample ROS bag files for the ColoRadar dataset. You can find them in the `bags` folder.
@@ -127,7 +127,7 @@ This project provides a comprehensive evaluation framework for point clouds, inc
 
 Before running the point cloud evaluation, prepare the radar point cloud and the ground truth point cloud. To do this, follow these steps:
 1. **Generate the Radar Point Cloud**: Use the DBE-Radar-Odometry pipeline to generate the radar point cloud. Or use the provided radar point cloud in the ColoRadar dataset. Then, project the radar point cloud to the world coordinate system based on the ground truth trajectory.
-2. **Generate the ground truth trajectory**: Project the lidar point cloud to the world coordinate system based on the ground truth trajectory.
+2. **Generate the Ground-truth Point Cloud**: Project the lidar point cloud to the world coordinate system based on the ground truth trajectory.
 3. **Run the Evaluation**: Follow the **[Usage](https://github.com/HKUSTGZ-IADC/Cloud_Map_Evaluation?tab=readme-ov-file#usage)** 
 section in the Cloud_Map_Evaluation project to run the evaluation.
   
