@@ -1,0 +1,43 @@
+<launch>
+    <arg name="nodelet_manager_on" default="False" />
+    <arg name="nodelet_manager_name" default="rio_nodelet_manager" />
+
+    <arg name="rio_queue_size" default="10" />
+    <arg name="rio_odom_frame_id" default="odom" />
+    <arg name="radar_frame_id" default="awr1843aop" />
+    <arg name="cam_frame_id" default="cam" />
+    <arg name="imu_frame_id" default="bmi088" />
+    <arg name="save_txt" default="false" />
+
+    <arg name="bag_start" default="0"/>
+    <arg name="bag_duration" default="-1.0"/>
+    <arg name="sleep_time" default="0.005"/> <!-- seconds -->
+
+    <arg name="visualize" default="True"/>
+
+    <!-- <arg name="dataset_dir" default="$(find rio)/data/coloradar"/> -->
+<!-- CaponQR | FFT  2_28_2021_outdoors_run0 | 12_21_2020_ec_hallways_run0 -->
+    <!-- <arg name="rosbag" default="12_21_2020_ec_hallways_run0"/> -->
+    <!-- <arg name="algorithm" default="CaponQR" /> -->
+    <arg name="config_path" default="$(find rio)/cfg"/>
+
+    <arg name="node_suffix" default="0" />
+    <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager_name)" args="manager" cwd="node" output="screen" if="$(arg nodelet_manager_on)"/>
+
+    <node pkg="nodelet" type="nodelet" name="rio" args="load rio::RioNodelet $(arg nodelet_manager_name)" output="screen">
+        <rosparam file="$(arg config_path)/graph_rio_coloradar.yaml" />
+        <param name="queue_size" value="$(arg rio_queue_size)"/>
+        <param name="save_results" value="$(arg save_txt)"/>
+        <param name="odom_frame_id" value="$(arg rio_odom_frame_id)"/>
+    </node>
+
+    <group if="$(arg visualize)">
+        <node pkg="rviz" type="rviz" name="rviz" args="-d $(find rio)/cfg/rviz.rviz"/>
+    </group>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="bmi088_to_awr1843aop_broadcaster"
+        args="0.0782222, -0.14925304, 0.02798629 0.99991507, -0.01051748,  0.00507049, -0.00579081 bmi088 awr1843aop" />
+
+    <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="bmi088_to_awr1843aop_broadcaster"
+        args="-0.08162928 -0.14724226 0.02889279 0.99991507 -0.01051748  0.00507049  0.00579081 bmi088 awr1843aop" /> -->
+</launch>

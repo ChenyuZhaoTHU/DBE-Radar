@@ -116,6 +116,34 @@ We provide a script to generate the ROS bag file.
 
 2. **Run the Odometry Algorithms**: Use the generated ROS bag file as input to run the odometry algorithms. This will produce the estimated trajectory and corresponding point cloud.
 The necessary configuration files are located in the `config` folder.
+You may need to modify the `launch` file to set the correct path according to your environment.
+
+   2.1 **Filter-based Odometry**:
+      Move the launch file and config file to the `rio` folder, and run the following command:
+
+      ```bash
+      roslaunch rio EKF_coloradar.launch config_path:=</your/custom/config/path>
+      ```
+
+      Then play the bag file:
+
+      ```bash
+      rosbag play <your_bag_file.bag>
+      ```
+
+   2.2 **Graph-based Odometry**:
+      Move the launch file and config file to the `rio` folder, and run the following command:
+
+      ```bash
+      roslaunch ekf_rio EKF_coloradar.launch dataset_dir:=</path/to/your/dataset>
+      ```
+
+      Then play the bag file:
+
+      ```bash
+      rosbag play <your_bag_file.bag>
+      ```
+
 Modify the launch files to use the appropriate config file for each odometry algorithm.
 
 3. **Evaluate the Odometry Results**: Use the [rpg_trajectory_evaluation](https://github.com/uzh-rpg/rpg_trajectory_evaluation) package to evaluate the odometry results.
