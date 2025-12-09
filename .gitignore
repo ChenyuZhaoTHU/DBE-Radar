@@ -8,6 +8,8 @@ venv
 dataset/*
 !dataset/*.json
 
+data_processed/*
+
 # Output folder for generated artifacts (images, etc.)
 output
 

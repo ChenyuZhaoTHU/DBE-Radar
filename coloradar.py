@@ -4,7 +4,7 @@ import argparse
 
 import matplotlib
 # matplotlib.use("WebAgg")
-matplotlib.use('TkAgg')
+matplotlib.use('Agg') # CHANGED: Set the backend to avoid tkinter dependency, better performance.
 import matplotlib.pyplot as plt
 
 from core.dataset import Coloradar

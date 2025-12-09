@@ -3,6 +3,7 @@
 A record is a collection of measurement from different sensors
 (lidar, radar, imu, etc.)
 """
+import gc
 from glob import glob
 import sys
 import os
@@ -100,7 +101,7 @@ class Record:
         output_dir = f"{output_dir}/{self.codename}/{sensor}"
         os.makedirs(output_dir, exist_ok=True)
         self._output_dir = output_dir
-        cpu_count: int = multiprocessing.cpu_count()-4
+        cpu_count: int = multiprocessing.cpu_count()-8
         print(f"Please wait! Processing on {cpu_count} CPU(s)")
 
         if sensor == "lidar":
@@ -109,7 +110,7 @@ class Record:
                 self.descriptor["paths"][sensor]["data"]
             )
             nb_files: int = len(os.listdir(dataset_path)) - 1
-            with multiprocessing.Pool(cpu_count) as pool:
+            with multiprocessing.Pool(cpu_count, maxtasksperchild=1) as pool:
                 pool.map(
                     self._process_lidar,
                     range(1, nb_files + 1),
@@ -121,7 +122,7 @@ class Record:
                 self.descriptor["paths"][sensor]["raw"]["data"]
             )
             nb_files: int = len(os.listdir(dataset_path)) - 1   
-            with multiprocessing.Pool(cpu_count) as pool:
+            with multiprocessing.Pool(cpu_count, maxtasksperchild=1) as pool:
                 # pool.map(
                 #     self._process_radar,
                 #     range(1, nb_files + 1),
@@ -236,6 +237,18 @@ class Record:
             )
         plt.savefig(f"{self._output_dir}/radar_{idx:04}.jpg", dpi=self._dpi)
         plt.close('all')
+
+
+        # --- 新增代码 ---
+        # 清除 matplotlib 的内部状态
+        plt.clf()
+        # 强制回收内存
+        gc.collect()
+        # ----------------
+
+
+
+
         return idx
 
     def _process_lidar(self, idx: int) -> int:
