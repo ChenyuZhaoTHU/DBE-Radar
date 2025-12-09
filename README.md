@@ -74,6 +74,16 @@ Adjust the parameters as needed for your specific dataset and requirements.**
    python3 coloradar.py --dataset <datasetname> --scradar --raw -bf --save-to <path_to_save>
    ```
 
+   **Create a vedio:** 
+   If you want to create the video from processed Range-Azimuth images, you can use,
+   ```bash
+   python3 coloradar.py --dataset <datasetname> --animate <path to data_processed>/scradar
+
+   #example
+   python3 coloradar.py --dataset aspen_run11 --animate ./data_processed/aspen_run11/scradar
+   ```
+
+
 2. **Run DBE-Based Processing for Radar Point Cloud**
    
    single frame processing
