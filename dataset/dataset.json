@@ -71,6 +71,10 @@
       {
         "codename": "aspen_run2",
         "path": "aspen_run2"
+      },
+      {
+        "codename": "my_test",
+        "path": "my_experiment_data"
       }
     ],
     "paths": {

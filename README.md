@@ -28,10 +28,9 @@ cd DBE-Radar-Odometry
 
 Install the virtual environment and dependencies using the following commands:
   ```bash
-  python -m venv venv
-  source ./venv/bin/activate
-
-  python -m pip install -r requirements.txt --extra-index-url https://rospypi.github.io/simple/
+  conda create -n rdsp python=3.12
+  conda activate rdsp
+  pip install -r requirements.txt --extra-index-url https://rospypi.github.io/simple/
   ```
 
 
