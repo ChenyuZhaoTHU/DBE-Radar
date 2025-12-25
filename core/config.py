@@ -71,11 +71,11 @@ AZ_RANGE = 70
 EL_RANGE = 25
 ANGLE_RES_AZ: float = 0.75
 ANGLE_RES_EL: float = 0.5
-AZ_BINS = int(round(AZ_RANGE * 2 / ANGLE_RES_AZ))  + 1
-EL_BINS = int(round((EL_RANGE * 2 / ANGLE_RES_EL))) + 1
+AZ_BINS = int(round(AZ_RANGE * 2 / ANGLE_RES_AZ))  + 1 # total number of azimuth bins
+EL_BINS = int(round((EL_RANGE * 2 / ANGLE_RES_EL))) + 1 # total number of elevation bins
 
-AZ_MESH = np.linspace(-AZ_RANGE, AZ_RANGE, AZ_BINS)* (np.pi / 180)
-EL_MESH = np.linspace(-EL_RANGE, EL_RANGE, EL_BINS)* (np.pi / 180)
+AZ_MESH = np.linspace(-AZ_RANGE, AZ_RANGE, AZ_BINS)* (np.pi / 180) # convert azimuth to radian
+EL_MESH = np.linspace(-EL_RANGE, EL_RANGE, EL_BINS)* (np.pi / 180) # convert elevation to radian
 
 # 2D Range-Azimuth OS-CFAR Parameters used for generating
 # radar pointclouds
