@@ -9,7 +9,7 @@ dataset/*
 !dataset/*.json
 
 data_processed/*
-
+scripts/img*
 # Output folder for generated artifacts (images, etc.)
 output
 
