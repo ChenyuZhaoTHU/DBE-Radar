@@ -10,6 +10,7 @@ dataset/*
 
 data_processed/*
 scripts/img*
+scripts/static*
 # Output folder for generated artifacts (images, etc.)
 output
 
